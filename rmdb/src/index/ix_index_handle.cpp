@@ -12,6 +12,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "ix_scan.h"
 
+
 /**
  * @brief 在当前node中查找第一个>=target的key_idx
  *
@@ -22,7 +23,7 @@ int IxNodeHandle::lower_bound(const char *target) const {
     // Todo:
     // 查找当前节点中第一个大于等于target的key，并返回key的位置给上层
     // 提示: 可以采用多种查找方式，如顺序遍历、二分查找等；使用ix_compare()函数进行比较
-
+    
     return -1;
 }
 
@@ -36,8 +37,29 @@ int IxNodeHandle::upper_bound(const char *target) const {
     // Todo:
     // 查找当前节点中第一个大于target的key，并返回key的位置给上层
     // 提示: 可以采用多种查找方式：顺序遍历、二分查找等；使用ix_compare()函数进行比较
-
-    return -1;
+    int i = 0;
+    if (binary_search) {
+        //TODO binary search have some bugs
+        int l = 0, r = page_hdr->num_key - 1;
+        i = l + (r - l) / 2;
+        while (l < r) {
+            if (ix_compare(target, keys + i * file_hdr->col_tot_len_, file_hdr->col_types_, file_hdr->col_lens_) < 0) {
+                r = i - 1;
+            } else if (ix_compare(target, keys + i * file_hdr->col_tot_len_, file_hdr->col_types_, file_hdr->col_lens_) > 0) {
+                l = i + 1;
+            } else {
+                break;
+            }
+            i = l + (r - l) / 2;
+        }
+    } else {
+        for (i = 0; i < page_hdr->num_key; i++) {
+            if (ix_compare(keys + (i + 1) * file_hdr->col_tot_len_, target, file_hdr->col_types_, file_hdr->col_lens_) <= 0) {
+                break;
+            }
+        }
+    }
+    return i;
 }
 
 /**
@@ -89,10 +111,22 @@ page_id_t IxNodeHandle::internal_lookup(const char *key) {
 void IxNodeHandle::insert_pairs(int pos, const char *key, const Rid *rid, int n) {
     // Todo:
     // 1. 判断pos的合法性
+    if(pos < 0 || page_hdr->num_key < pos){//他的作用域是有page_hdr的
+        return;
+    }
     // 2. 通过key获取n个连续键值对的key值，并把n个key值插入到pos位置
-    // 3. 通过rid获取n个连续键值对的rid值，并把n个rid值插入到pos位置
-    // 4. 更新当前节点的键数量
+    assert(pos + n <= file_hdr->btree_order_); // 防止插入之后溢出
+    memmove(keys + (pos + n) * file_hdr->col_tot_len_, 
+    keys + pos * file_hdr->col_tot_len_, 
+    (page_hdr->num_key - pos) * file_hdr->col_tot_len_);
 
+    // 3. 通过rid获取n个连续键值对的rid值，并把n个rid值插入到pos位置
+    memcpy(keys + pos * file_hdr->col_tot_len_, key, n * file_hdr->col_tot_len_);
+
+    // 4. 更新当前节点的键数量
+    //memove相当于把后边的截断然后补充新的内容
+    memmove(rids + (pos + n), rids + pos, (page_hdr->num_key - pos) * sizeof(Rid));
+    memcpy(rids + pos, rid, n * sizeof(Rid));
 }
 
 /**
@@ -104,12 +138,17 @@ void IxNodeHandle::insert_pairs(int pos, const char *key, const Rid *rid, int n)
  */
 int IxNodeHandle::insert(const char *key, const Rid &value) {
     // Todo:
-    // 1. 查找要插入的键值对应该插入到当前节点的哪个位置
+    // 1. 查找要插入的键值对应该插入到当前节点的哪个位置    
+    int key_idx = lower_bound(key);//在node中找到第一个大于key的key_idx;
     // 2. 如果key重复则不插入
+    if (key_idx < page_hdr->num_key && ix_compare(key, keys + key_idx * file_hdr->col_tot_len_, file_hdr->col_types_, file_hdr->col_lens_) == 0) {
+        return page_hdr->num_key;
+    }
     // 3. 如果key不重复则插入键值对
-    // 4. 返回完成插入操作之后的键值对数量
-
-    return -1;
+    insert_pairs(key_idx, key, &value, 1);
+    page_hdr->num_key++;//增加键值对的个数
+    //4.返回完成插入操作之后键值对的数量
+    return page_hdr->num_key;
 }
 
 /**

@@ -28,6 +28,18 @@ RmScan::RmScan(const RmFileHandle *file_handle) : file_handle_(file_handle) {
 void RmScan::next() {
     // Todo:
     // 找到文件中下一个存放了记录的非空闲位置，用rid_来指向这个位置
+     while(rid_.page_no < file_handle_->file_hdr_.num_pages) {   //TODO：和next_free_page_no==-1有区别吗？
+        RmPageHandle page_handle = file_handle_->fetch_page_handle(rid_.page_no);
+        int next_no = Bitmap::next_bit(1, page_handle.bitmap, file_handle_->file_hdr_.num_records_per_page, rid_.slot_no);
+        if (next_no < file_handle_->file_hdr_.num_records_per_page) {
+            rid_.slot_no = next_no;
+            return;
+        }
+        rid_.slot_no = -1;  //每次进入新页面，从slot_no=-1开始查找
+        rid_.page_no++;
+    }
+    rid_.slot_no = -1;
+    rid_.page_no = -1;
     
 }
 
@@ -36,8 +48,7 @@ void RmScan::next() {
  */
 bool RmScan::is_end() const {
     // Todo: 修改返回值
-
-    return false;
+    return rid_.page_no == -1;
 }
 
 /**

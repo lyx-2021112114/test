@@ -16,6 +16,10 @@ See the Mulan PSL v2 for more details. */
 static constexpr int BITMAP_WIDTH = 8;
 static constexpr unsigned BITMAP_HIGHEST_BIT = 0x80u;  // 128 (2^7)
 
+/*bitmap表示一个集合，这里应该是这样的逻辑
+
+1. 一个块可以看做是记录数组{0....max-1}
+2. bitmap标记现在哪个位置是有效的*/
 class Bitmap {
    public:
     // 从地址bm开始的size个字节全部置0
